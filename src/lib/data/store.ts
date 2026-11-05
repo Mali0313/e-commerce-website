@@ -58,24 +58,51 @@ export function getProducts(filters: ProductFilters = {}): Product[] {
   let list = [...inMemoryProducts].filter((p) => p.is_active);
 
   // Category filter
+  let categoryFilteredList = list;
   if (filters.category) {
     const cat = getCategoryBySlug(filters.category);
     if (cat) {
       const subIds = cat.subcategories?.map((s) => s.id) || [];
       const matchIds = [cat.id, ...subIds];
-      list = list.filter((p) => p.category_id && matchIds.includes(p.category_id));
+      categoryFilteredList = list.filter((p) => p.category_id && matchIds.includes(p.category_id));
     }
   }
 
-  // Search filter
+  // Search filter with smart plural/singular and multi-word matching
   if (filters.search) {
     const q = filters.search.toLowerCase().trim();
-    list = list.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q)
-    );
+    const words = q.split(/\s+/).filter(Boolean);
+
+    const matchesSearch = (p: Product) => {
+      const fullText = `${p.title} ${p.description} ${p.sku || ''}`.toLowerCase();
+      // 1. Exact or direct substring match
+      if (fullText.includes(q)) return true;
+
+      // 2. All search words match or match their singular/plural variation
+      return words.every((word) => {
+        if (fullText.includes(word)) return true;
+        // Singular check (e.g., "kurtas" -> "kurta", "earbuds" -> "earbud", "chargers" -> "charger")
+        if (word.endsWith('s') && word.length > 3 && fullText.includes(word.slice(0, -1))) {
+          return true;
+        }
+        // Plural check (e.g., "kurta" -> "kurtas")
+        if (!word.endsWith('s') && fullText.includes(word + 's')) {
+          return true;
+        }
+        return false;
+      });
+    };
+
+    // First try matching within category
+    const matchedWithinCategory = categoryFilteredList.filter(matchesSearch);
+    if (matchedWithinCategory.length > 0 || !filters.category) {
+      list = matchedWithinCategory;
+    } else {
+      // Fallback: If no match in active category, search entire store catalog
+      list = list.filter(matchesSearch);
+    }
+  } else {
+    list = categoryFilteredList;
   }
 
   // Price range

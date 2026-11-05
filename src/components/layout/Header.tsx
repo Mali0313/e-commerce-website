@@ -75,26 +75,29 @@ export function Header() {
     }
   }, [pathname]);
 
-  // Live search suggestion filter
+  // Live search suggestion filter (Smart multi-word and plural/singular matching)
   useEffect(() => {
     if (searchQuery.trim().length > 1) {
       const q = searchQuery.toLowerCase().trim();
+      const words = q.split(/\s+/).filter(Boolean);
+
       const matches = INITIAL_PRODUCTS.filter((p) => {
-        const matchesCategory =
-          selectedCategory === 'all' ||
-          p.category_id === selectedCategory ||
-          p.category?.name.toLowerCase().includes(selectedCategory.toLowerCase());
-        const matchesText =
-          p.title.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          p.sku?.toLowerCase().includes(q);
-        return matchesCategory && matchesText;
+        const fullText = `${p.title} ${p.description} ${p.sku || ''}`.toLowerCase();
+        return (
+          fullText.includes(q) ||
+          words.every((w) => {
+            if (fullText.includes(w)) return true;
+            if (w.endsWith('s') && w.length > 3 && fullText.includes(w.slice(0, -1))) return true;
+            if (!w.endsWith('s') && fullText.includes(w + 's')) return true;
+            return false;
+          })
+        );
       }).slice(0, 6);
       setSuggestions(matches);
     } else {
       setSuggestions([]);
     }
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery]);
 
   // Click outside search suggestions
   useEffect(() => {
@@ -114,10 +117,16 @@ export function Header() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      setSuggestions([]);
-      const catParam = selectedCategory !== 'all' ? `&category=${selectedCategory}` : '';
-      router.push(`/products?search=${encodeURIComponent(searchQuery.trim())}${catParam}`);
+    const query = searchQuery.trim();
+    setSuggestions([]);
+
+    if (query) {
+      const catParam = selectedCategory !== 'all' ? `&category=${encodeURIComponent(selectedCategory)}` : '';
+      router.push(`/products?search=${encodeURIComponent(query)}${catParam}`);
+    } else if (selectedCategory !== 'all') {
+      router.push(`/category/${encodeURIComponent(selectedCategory)}`);
+    } else {
+      router.push('/products');
     }
   };
 
@@ -255,8 +264,9 @@ export function Header() {
                 {/* Big Orange Search Button */}
                 <button
                   type="submit"
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-5 sm:px-6 py-2.5 flex items-center justify-center transition-colors shrink-0 cursor-pointer shadow-sm"
-                  aria-label="Search"
+                  className="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-5 sm:px-6 py-2.5 flex items-center justify-center transition-all shrink-0 cursor-pointer shadow-sm hover:brightness-105"
+                  aria-label="Search products"
+                  title="Search products"
                 >
                   <Search className="w-4 h-4" />
                 </button>
@@ -492,24 +502,37 @@ export function Header() {
 
           {/* PERMANENT MOBILE SEARCH BAR */}
           <div ref={mobileSearchRef} className="pb-3 md:hidden">
-            <form onSubmit={handleSearchSubmit} className="relative">
+            <form onSubmit={handleSearchSubmit} className="relative flex items-center">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search clothes, lawn, earbuds, cookware..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-24 py-2.5 text-xs text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
               />
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSuggestions([]);
+                  }}
+                  className="absolute right-18 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
+                  aria-label="Clear search text"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+              {/* Clickable Mobile Search Button */}
+              <button
+                type="submit"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1"
+                aria-label="Search"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Go</span>
+              </button>
             </form>
           </div>
         </div>
